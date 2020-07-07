@@ -177,6 +177,7 @@ a = ComposedSchema(value)
 bases = (ComposedSchema, list)
 assert a.__class__.__bases__ == bases
 assert a.value == value
+assert a == value
 
 # ListModel
 value = [0]
@@ -184,6 +185,7 @@ a = ComposedSchema(value)
 bases = (ComposedSchema, ListModel)
 assert a.__class__.__bases__ == bases
 assert a.value == value
+assert a == value
 
 # TODO a composed schema that includes an eum
 
