@@ -6,7 +6,7 @@ class Cat:
         self.color = kwargs.get('color')
 
 
-def make_dynamic_class(bases, cls_dict):
+def make_dynamic_class(bases):
     """
     Returns a new DynamicBaseClasses class that is made with the subclasses bases
     TODO: lru_cache this
@@ -15,7 +15,7 @@ def make_dynamic_class(bases, cls_dict):
         bases (tuple): the base classes that DynamicBaseClasses inherits from
         cls_dict (dict): the class dictionary
     """
-    new_cls = type('DynamicBaseClasses', bases, cls_dict)
+    new_cls = type('DynamicBaseClasses', bases, {})
     return new_cls
 
 def make_dynamic_enum(bases, value):
@@ -56,6 +56,42 @@ class StringEnum(str, Enum):
     RED = 'red'
 
 
+def get_new_class(cls, *args, **kwargs):
+    """
+    For now we return dynamic classes of different bases depending upon the inputs
+    In real life this function will use the class discriminator and composed schema info to determine
+    the base classes that we will use to build new_cls
+
+    Returns:
+        new_cls (type): the new dynamic class that we have built
+    """
+    if args and not kwargs and len(args) == 1:
+        arg = args[0]
+        is_none = args[0] is None
+        is_bool = isinstance(arg, bool)
+        if is_none or is_bool:
+            # type(None) and bool cannot be subclassed so we must use Enums
+            # to store None, True, and False
+            return make_dynamic_enum(
+                (cls, ), arg
+            )
+        elif isinstance(arg, int):
+            return make_dynamic_class((cls, IntModel))
+        elif isinstance(arg, float):
+            return make_dynamic_class((cls, float))
+        elif isinstance(arg, str):
+            chosen_cls = StringEnum
+            if issubclass(chosen_cls, StringEnum):
+                # TODO get enum values
+                pass
+            return make_dynamic_class((cls, StringEnum))
+        else:
+            raise ValueError('case not handled yet')
+    elif kwargs:
+        return make_dynamic_class((cls, Cat))
+    raise ValueError('Arguments are required to make a new class')
+
+
 class ComposedSchema:
     def __new__(cls, *args, **kwargs):
         if cls == ComposedSchema:
@@ -63,33 +99,7 @@ class ComposedSchema:
             # make a new class, new_cls
             # which includes dynamic bases including self
             # return an instance of that new class
-            new_cls = None
-            if args and not kwargs and len(args) == 1:
-                arg = args[0]
-                is_none = args[0] is None
-                is_bool = isinstance(arg, bool)
-                if is_none or is_bool:
-                    # type(None) and bool cannot be subclassed so we must use Enums
-                    # to store None, True, and False
-                    new_cls = make_dynamic_enum(
-                        (cls, ), arg
-                    )
-                elif isinstance(arg, int):
-                    new_cls = make_dynamic_class((cls, IntModel), {})
-                elif isinstance(arg, float):
-                    new_cls = make_dynamic_class((cls, float), {})
-                elif isinstance(arg, str):
-                    chosen_cls = StringEnum
-                    if issubclass(chosen_cls, StringEnum):
-                        # TODO get enum values
-                        pass
-                    new_cls = make_dynamic_class((cls, StringEnum), {})
-                else:
-                    raise ValueError('case not handled yet')
-            elif kwargs:
-                new_cls = make_dynamic_class((cls, Cat), {})
-            if new_cls is None:
-                raise Exception('Unable to create a new instance')
+            new_cls = get_new_class(cls, *args, **kwargs)
             new_inst = new_cls.__new__(new_cls, *args, **kwargs)
             return new_inst
         if issubclass(cls, Enum):
