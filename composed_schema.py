@@ -54,6 +54,9 @@ class Cat:
     def __init__(self, *args, **kwargs):
         self.color = kwargs.get('color')
 
+class ListModel(list):
+    pass
+
 
 def get_new_class(cls, *args, **kwargs):
     """
@@ -80,6 +83,10 @@ def get_new_class(cls, *args, **kwargs):
             return make_dynamic_class(cls, float)
         elif isinstance(arg, str):
             return make_dynamic_class(cls, StringEnum)
+        elif isinstance(arg, list):
+            if not arg:
+                return make_dynamic_class(cls, list)
+            return make_dynamic_class(cls, ListModel)
         else:
             raise ValueError('case not handled yet')
     elif kwargs:
@@ -125,7 +132,7 @@ class ComposedSchema:
             if not issubclass(self.__class__, inheritable_primitive_types):
                 super().__init__(*args, **kwargs)
 
-# Cat
+# Cat (object type model)
 a = ComposedSchema(color='black')
 for cls in [ComposedSchema, Cat]:
     assert issubclass(a.__class__, cls)
@@ -164,7 +171,21 @@ bases = (ComposedSchema, str, Enum)
 assert a.__class__.__bases__ == bases
 assert a.value == value
 
-# composed schema that includes an eum
+# list
+value = []
+a = ComposedSchema(value)
+bases = (ComposedSchema, list)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+
+# ListModel
+value = [0]
+a = ComposedSchema(value)
+bases = (ComposedSchema, ListModel)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+
+# TODO a composed schema that includes an eum
 
 # TODO get working for for composed class inside a composed class, where the innermost holds None
 # if
