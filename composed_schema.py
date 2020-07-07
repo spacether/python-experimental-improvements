@@ -117,7 +117,6 @@ class ComposedSchema:
     _nullable = True
 
     def __init__(self, *args, **kwargs):
-        # do not set this if we are a subclass of enum
         self.kwargs = kwargs
         not_enum = Enum not in self.__class__.__bases__
         if not_enum:
