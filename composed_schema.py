@@ -95,6 +95,29 @@ def get_new_class(cls, *args, **kwargs):
 
 
 class ComposedSchema:
+    @classmethod
+    def _validate(cls, *args, **kwargs):
+        # we should only run validation once
+        # so I will need to extract type checking, allowed value checking and validation checking into a class method
+        # when classes are picked (with a discriminator or in a composed schema)
+        # they will be picked from inside a __new__ invocation so we need to move that validation checking into a class
+        # method
+        # in __init__ _validate will not be called because it was called prior in __new__
+        # when properties are changed like adding an item to an array or changing cat.color, _validate will be called
+        # __init__ will only be assignment
+        if args and len(args) != 1:
+            raise ValueError('When validating a value only, that single value must be passed in')
+        if args and kwargs:
+            raise ValueError('One cannot validate both args and kwargs, it must be one or the other')
+        if not args and not kwargs:
+            # validate arg or validate kwargs
+            pass
+        elif arg:
+            # validate arg
+            pass
+        # validate kwargs
+        pass
+
     def __new__(cls, *args, **kwargs):
         if cls == ComposedSchema:
             # we are making an instance of self, but instead of making self
