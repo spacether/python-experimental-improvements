@@ -13,6 +13,10 @@ class FalseEnum(Enum):
     FALSE = False
 
 
+class ModelComposed:
+    pass
+
+
 def make_dynamic_class(*bases):
     """
     Returns a new DynamicBaseClasses class that is made with the subclasses bases
@@ -60,14 +64,27 @@ class ListModel(list):
     pass
 
 
-def get_new_instance(self_class, cls, super_instance, *args, **kwargs):
+def get_new_instance(self_class, cls, super_instance, inheritance_chain, required_interface_cls, *args, **kwargs):
     if cls == self_class:
         # we are making an instance of self, but instead of making self
         # make a new class, new_cls
         # which includes dynamic bases including self
         # return an instance of that new class
-        new_cls = self_class._get_new_class(*args, **kwargs)
-        new_inst = new_cls.__new__(new_cls, *args, **kwargs)
+        cyclic_inheritance_case = self_class in inheritance_chain
+        if cyclic_inheritance_case:
+            # Animal -> Cat -> Animal
+            # don't make a Cat in animal again, just make Animal
+            return super_instance.__new__(cls)
+        inheritance_chain = list(inheritance_chain)
+        inheritance_chain.append(self_class)
+        inheritance_chain = tuple(inheritance_chain)
+        new_cls = self_class._get_new_class(inheritance_chain, required_interface_cls, *args, **kwargs)
+        if issubclass(new_cls, Enum):
+            # for enums the new invoked is actual the Enum.__new__ the it calls back to this new to make class instances
+            # so we can't pass in inheritance_chain + required_interface_cls
+            new_inst = new_cls.__new__(new_cls, *args, **kwargs)
+        else:
+            new_inst = new_cls.__new__(new_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
         return new_inst
     if issubclass(cls, Enum):
         # we are creating new instances of DynamicBaseClassesEnum, Enum based class
@@ -93,7 +110,22 @@ def get_new_instance(self_class, cls, super_instance, *args, **kwargs):
     # we are creating new instances of DynamicBaseClasses, object based class
     return super_instance.__new__(cls)
 
-class ComposedSchema:
+def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs):
+    real_additional_classes = []
+    for chosen_cls in chosen_additional_classes:
+        if issubclass(chosen_cls, ModelComposed):
+            new_inst = chosen_cls.__new__(chosen_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
+            chosen_cls = new_inst.__class__
+        real_additional_classes.append(chosen_cls)
+    if any(issubclass(c, required_interface_cls) for c in real_additional_classes) and cls is required_interface_cls:
+        if len(real_additional_classes) == 1:
+            return real_additional_classes[0]
+        return make_dynamic_class(*real_additional_classes)
+    return make_dynamic_class(cls, *real_additional_classes)
+
+
+
+class ComposedSchema(ModelComposed):
     @classmethod
     def _validate(cls, *args, **kwargs):
         # we should only run validation once
@@ -125,10 +157,12 @@ class ComposedSchema:
         pass
 
     def __new__(cls, *args, **kwargs):
-        return get_new_instance(ComposedSchema, cls, super(), *args, **kwargs)
+        required_interface_cls = kwargs.pop('required_interface_cls', ComposedSchema)
+        inheritance_chain = kwargs.pop('inheritance_chain', ())
+        return get_new_instance(ComposedSchema, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, *args, **kwargs):
+    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
         """
         For now we return dynamic classes of different bases depending upon the inputs
         In real life this function will use the class discriminator and composed schema info to determine
@@ -179,7 +213,7 @@ for cls in [ComposedSchema, Panther]:
     assert isinstance(a, cls)
 assert a.color == "black"
 
-# None, True, and False
+# # None, True, and False
 for value in {None, True, False}:
     a = ComposedSchema(value)
     for cls in [ComposedSchema, Enum]:
@@ -228,29 +262,37 @@ assert a.value == value
 assert a == value
 
 
-class Animal:
+class Animal(ModelComposed):
     def __new__(cls, *args, **kwargs):
-        return get_new_instance(Animal, cls, super(), *args, **kwargs)
+        required_interface_cls = kwargs.pop('required_interface_cls', Animal)
+        inheritance_chain = kwargs.pop('inheritance_chain', ())
+        return get_new_instance(Animal, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, *args, **kwargs):
-        return make_dynamic_class(cls, Cat)
+    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
+        chosen_additional_classes = [Cat]
+        # maybe the classes in chosen_additional_classes are composed, and if so get the real class
+        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
         not_enum = Enum not in self.__class__.__bases__
         if not_enum:
-            if not issubclass(self.__class__, inheritable_primitive_types):
+            super_init_is_object_init = super().__thisclass__.__mro__[1].__init__ == object.__init__
+            if not issubclass(self.__class__, inheritable_primitive_types) and not super_init_is_object_init:
                 super().__init__(*args, **kwargs)
 
 
-class Cat:
+class Cat(ModelComposed):
     def __new__(cls, *args, **kwargs):
-        return get_new_instance(Cat, cls, super(), *args, **kwargs)
+        required_interface_cls = kwargs.pop('required_interface_cls', Cat)
+        inheritance_chain = kwargs.pop('inheritance_chain', ())
+        return get_new_instance(Cat, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, *args, **kwargs):
-        return make_dynamic_class(cls, Animal)
+    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
+        chosen_additional_classes = [Animal]
+        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get('name')
@@ -261,15 +303,10 @@ class Cat:
             if not issubclass(self.__class__, inheritable_primitive_types):
                 super().__init__(*args, **kwargs)
 
-
-# TypeError: Cannot create a consistent method resolution
-# order (MRO) for bases Animal, Cat
-# class Cat(Animal):
-#     def __init__(self, *args, **kwargs):
-#         self.name = kwargs.get('name')
-# animal_cat = Animal(name='Sprinkles')
-# pdb.set_trace()
-# pass
+# composed schema contains composed schema with cycle
+animal_cat = Animal(name='Sprinkles')
+bases = (Cat, Animal)
+assert animal_cat.__class__.__bases__ == bases
 
 
 # # Difficult example
@@ -291,7 +328,7 @@ class Cat:
 # Food:
 # allOf:
 # - Fruit
-#
+
 # # for food we assume that our class would look like
 # Food(Fruit)
 # # but if we did that, then Food would not be including the required Apple or Pear
