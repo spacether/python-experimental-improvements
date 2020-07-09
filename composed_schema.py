@@ -1,6 +1,5 @@
 import pdb
 import datetime
-import inspect
 from enum import Enum
 
 
@@ -124,22 +123,16 @@ def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_in
         return make_dynamic_class(*real_additional_classes)
     return make_dynamic_class(cls, *real_additional_classes)
 
-def super_init(self, super_init, *args, **kwargs):
+def super_init(self, super_instance, *args, **kwargs):
     not_enum = Enum not in self.__class__.__bases__
     not_primitive = not issubclass(self.__class__, inheritable_primitive_types)
-    # TODO this is not working for cat
-    # alternate solution:
-    # method_resolution_order = self.__class__.__mro__
-    # (Pdb) self.__class__.__mro__
-    # (<class '__main__.DynamicBaseClasses'>, <class '__main__.Cat'>, <class '__main__.Animal'>, <class '__main__.ModelComposed'>, <class 'object'>)
-    #
-    # (Pdb) sup.__thisclass__
-    # <class '__main__.Animal'>
-    # find the next index in mro, check the __init__ of that and if it is not object init call it
-    signature = inspect.signature(super_init)
-    contains_args_and_kwargs = signature.parameters['args'] and signature.parameters['kwargs']
-    if not_enum and not_primitive and contains_args_and_kwargs:
-        super_init(*args, **kwargs)
+    classes_in_order = self.__class__.__mro__
+    for i, cls in enumerate(classes_in_order):
+        if cls == super_instance.__thisclass__:
+            remainder_cls = type('_unused', classes_in_order[i+1:], {})
+    super_init_is_object_init = remainder_cls.__init__ == object.__init__
+    if not_enum and not_primitive and not super_init_is_object_init:
+        super_instance.__init__(*args, **kwargs)
 
 
 class ComposedSchema(ModelComposed):
@@ -186,64 +179,64 @@ class ComposedSchema(ModelComposed):
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
-        super_init(self, super().__init__, *args, **kwargs)
+        super_init(self, super(), *args, **kwargs)
 
     _nullable = True
 
-# Panther (object type model)
-a = ComposedSchema(color='black')
-for cls in [ComposedSchema, Panther]:
-    assert issubclass(a.__class__, cls)
-    assert isinstance(a, cls)
-assert a.color == "black"
-
-# # None, True, and False
-for value in {None, True, False}:
-    a = ComposedSchema(value)
-    for cls in [ComposedSchema, Enum]:
-        assert issubclass(a.__class__, cls)
-        assert isinstance(a, cls)
-    assert a.value is value
-
-# IntModel
-value = 5
-a = ComposedSchema(value)
-bases = (ComposedSchema, IntModel)
-assert a.__class__.__bases__ == bases
-# Note: for all bases isinstance and issubclass returns True when checking a and a.__class__ against them
-assert a.value == value
-assert a == value
-
-# float
-value = 3.14
-a = ComposedSchema(value)
-bases = (ComposedSchema, float)
-assert a.__class__.__bases__ == bases
-assert a.value == value
-assert a == value
-
-# Enum model
-value = 'red'
-a = ComposedSchema(value)
-bases = (ComposedSchema, str, Enum)
-assert a.__class__.__bases__ == bases
-assert a.value == value
-
-# list
-value = []
-a = ComposedSchema(value)
-bases = (ComposedSchema, list)
-assert a.__class__.__bases__ == bases
-assert a.value == value
-assert a == value
-
-# ListModel
-value = [0]
-a = ComposedSchema(value)
-bases = (ComposedSchema, ListModel)
-assert a.__class__.__bases__ == bases
-assert a.value == value
-assert a == value
+# # Panther (object type model)
+# a = ComposedSchema(color='black')
+# for cls in [ComposedSchema, Panther]:
+#     assert issubclass(a.__class__, cls)
+#     assert isinstance(a, cls)
+# assert a.color == "black"
+#
+# # # None, True, and False
+# for value in {None, True, False}:
+#     a = ComposedSchema(value)
+#     for cls in [ComposedSchema, Enum]:
+#         assert issubclass(a.__class__, cls)
+#         assert isinstance(a, cls)
+#     assert a.value is value
+#
+# # IntModel
+# value = 5
+# a = ComposedSchema(value)
+# bases = (ComposedSchema, IntModel)
+# assert a.__class__.__bases__ == bases
+# # Note: for all bases isinstance and issubclass returns True when checking a and a.__class__ against them
+# assert a.value == value
+# assert a == value
+#
+# # float
+# value = 3.14
+# a = ComposedSchema(value)
+# bases = (ComposedSchema, float)
+# assert a.__class__.__bases__ == bases
+# assert a.value == value
+# assert a == value
+#
+# # Enum model
+# value = 'red'
+# a = ComposedSchema(value)
+# bases = (ComposedSchema, str, Enum)
+# assert a.__class__.__bases__ == bases
+# assert a.value == value
+#
+# # list
+# value = []
+# a = ComposedSchema(value)
+# bases = (ComposedSchema, list)
+# assert a.__class__.__bases__ == bases
+# assert a.value == value
+# assert a == value
+#
+# # ListModel
+# value = [0]
+# a = ComposedSchema(value)
+# bases = (ComposedSchema, ListModel)
+# assert a.__class__.__bases__ == bases
+# assert a.value == value
+# assert a == value
 
 
 class Animal(ModelComposed):
@@ -259,9 +252,7 @@ class Animal(ModelComposed):
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
-        sup = super()
-        pdb.set_trace()
-        super_init(self, super().__init__, *args, **kwargs)
+        super_init(self, super(), *args, **kwargs)
 
 class Cat(ModelComposed):
     def __new__(cls, *args, **kwargs):
@@ -277,7 +268,7 @@ class Cat(ModelComposed):
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get('name')
         self.kwargs = kwargs
-        super_init(self, super().__init__, *args, **kwargs)
+        super_init(self, super(), *args, **kwargs)
 
 
 # composed schema contains composed schema with cycle
