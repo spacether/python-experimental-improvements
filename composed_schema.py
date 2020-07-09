@@ -247,10 +247,15 @@ class Animal(ModelComposed):
 
     @classmethod
     def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
-        chosen_additional_classes = [Cat]
+        animal_type = kwargs['animal_type']
+        if animal_type == 'Cat':
+            chosen_additional_classes = [Cat]
+        elif animal_type == 'Dog':
+            chosen_additional_classes = [Dog]
         return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
+        self.name = kwargs.get('name')
         self.kwargs = kwargs
         super_init(self, super(), *args, **kwargs)
 
@@ -266,15 +271,25 @@ class Cat(ModelComposed):
         return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
-        self.name = kwargs.get('name')
         self.kwargs = kwargs
         super_init(self, super(), *args, **kwargs)
 
+class Dog:
+    def __init__(self, *args, **kwargs):
+        pass
+
 
 # composed schema contains composed schema with cycle
-animal_cat = Animal(name='Sprinkles')
+animal = Animal(name='Sprinkles', animal_type='Cat')
 bases = (Cat, Animal)
-assert animal_cat.__class__.__bases__ == bases
+assert animal.__class__.__bases__ == bases
+assert animal.name == 'Sprinkles'
+
+# Dog, basses has expected Animal ... order for non-composed oneOf model Dog
+animal = Animal(name='Lassie', animal_type='Dog')
+bases = (Animal, Dog)
+assert animal.__class__.__bases__ == bases
+assert animal.name == 'Lassie'
 
 
 # # Difficult example
