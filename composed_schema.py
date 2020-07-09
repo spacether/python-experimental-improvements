@@ -126,13 +126,14 @@ def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_in
 def super_init(self, super_instance, *args, **kwargs):
     not_enum = Enum not in self.__class__.__bases__
     not_primitive = not issubclass(self.__class__, inheritable_primitive_types)
-    classes_in_order = self.__class__.__mro__
-    for i, cls in enumerate(classes_in_order):
-        if cls == super_instance.__thisclass__:
-            remainder_cls = type('_unused', classes_in_order[i+1:], {})
-    super_init_is_object_init = remainder_cls.__init__ == object.__init__
-    if not_enum and not_primitive and not super_init_is_object_init:
-        super_instance.__init__(*args, **kwargs)
+    if not_enum and not_primitive:
+        classes_in_order = self.__class__.__mro__
+        for i, cls in enumerate(classes_in_order):
+            if cls == super_instance.__thisclass__:
+                remainder_cls = type('_unused', classes_in_order[i+1:], {})
+        super_init_is_object_init = remainder_cls.__init__ == object.__init__
+        if not super_init_is_object_init:
+            super_instance.__init__(*args, **kwargs)
 
 
 class ComposedSchema(ModelComposed):
@@ -183,60 +184,59 @@ class ComposedSchema(ModelComposed):
 
     _nullable = True
 
-# # Panther (object type model)
-# a = ComposedSchema(color='black')
-# for cls in [ComposedSchema, Panther]:
-#     assert issubclass(a.__class__, cls)
-#     assert isinstance(a, cls)
-# assert a.color == "black"
-#
-# # # None, True, and False
-# for value in {None, True, False}:
-#     a = ComposedSchema(value)
-#     for cls in [ComposedSchema, Enum]:
-#         assert issubclass(a.__class__, cls)
-#         assert isinstance(a, cls)
-#     assert a.value is value
-#
-# # IntModel
-# value = 5
-# a = ComposedSchema(value)
-# bases = (ComposedSchema, IntModel)
-# assert a.__class__.__bases__ == bases
-# # Note: for all bases isinstance and issubclass returns True when checking a and a.__class__ against them
-# assert a.value == value
-# assert a == value
-#
-# # float
-# value = 3.14
-# a = ComposedSchema(value)
-# bases = (ComposedSchema, float)
-# assert a.__class__.__bases__ == bases
-# assert a.value == value
-# assert a == value
-#
-# # Enum model
-# value = 'red'
-# a = ComposedSchema(value)
-# bases = (ComposedSchema, str, Enum)
-# assert a.__class__.__bases__ == bases
-# assert a.value == value
-#
-# # list
-# value = []
-# a = ComposedSchema(value)
-# bases = (ComposedSchema, list)
-# assert a.__class__.__bases__ == bases
-# assert a.value == value
-# assert a == value
-#
-# # ListModel
-# value = [0]
-# a = ComposedSchema(value)
-# bases = (ComposedSchema, ListModel)
-# assert a.__class__.__bases__ == bases
-# assert a.value == value
-# assert a == value
+# Panther (object type model)
+a = ComposedSchema(color='black')
+for cls in [ComposedSchema, Panther]:
+    assert issubclass(a.__class__, cls)
+    assert isinstance(a, cls)
+assert a.color == "black"
+
+# # None, True, and False
+for value in {None, True, False}:
+    a = ComposedSchema(value)
+    bases = (ComposedSchema, Enum)
+    assert a.__class__.__bases__ == bases
+    # Note: for all bases isinstance and issubclass returns True when checking a and a.__class__ against them
+    assert a.value is value
+
+# IntModel
+value = 5
+a = ComposedSchema(value)
+bases = (ComposedSchema, IntModel)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+assert a == value
+
+# float
+value = 3.14
+a = ComposedSchema(value)
+bases = (ComposedSchema, float)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+assert a == value
+
+# Enum model
+value = 'red'
+a = ComposedSchema(value)
+bases = (ComposedSchema, str, Enum)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+
+# list
+value = []
+a = ComposedSchema(value)
+bases = (ComposedSchema, list)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+assert a == value
+
+# ListModel
+value = [0]
+a = ComposedSchema(value)
+bases = (ComposedSchema, ListModel)
+assert a.__class__.__bases__ == bases
+assert a.value == value
+assert a == value
 
 
 class Animal(ModelComposed):
@@ -318,18 +318,7 @@ assert animal.name == 'Lassie'
 # we need (Fruit, Apple), which we get from running the __new__
 # if get back DynamicBaseClasses then we need to grab all of those bases
 
-# Qustion to self: can allOf clases be put in models as base classes automatically?
-
-# TODO a composed schema that includes an eum
-
-# TODO get working for for composed class inside a composed class, where the innermost holds None
-# if
-# - we are setting a single value of type bool or type(None)
-# - and our rightmost class is not Enum
-# then
-# get the bases of that class (must do it by making an instance)
-# then replace those bases with our chosen class
-# this only applies when our data is bool/type(None) or is a value from an enum
-# this does not apply to array
-# this does not apply to object models
-# this does not apply to a composed schema containing non-composed schema models
+# Question to self: can allOf clases be put in models as base classes automatically?
+# Answer: no because that base class could be a composed schema in which case we would need
+#       to convert that composed schema class into the real DynamicBaseClasses class
+#       well it's possible but it would be painfull, best to handle it in the function
