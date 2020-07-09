@@ -1,5 +1,6 @@
 import pdb
 import datetime
+import inspect
 from enum import Enum
 
 
@@ -123,39 +124,25 @@ def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_in
         return make_dynamic_class(*real_additional_classes)
     return make_dynamic_class(cls, *real_additional_classes)
 
+def super_init(self, super_init, *args, **kwargs):
+    not_enum = Enum not in self.__class__.__bases__
+    not_primitive = not issubclass(self.__class__, inheritable_primitive_types)
+    # TODO this is not working for cat
+    # alternate solution:
+    # method_resolution_order = self.__class__.__mro__
+    # (Pdb) self.__class__.__mro__
+    # (<class '__main__.DynamicBaseClasses'>, <class '__main__.Cat'>, <class '__main__.Animal'>, <class '__main__.ModelComposed'>, <class 'object'>)
+    #
+    # (Pdb) sup.__thisclass__
+    # <class '__main__.Animal'>
+    # find the next index in mro, check the __init__ of that and if it is not object init call it
+    signature = inspect.signature(super_init)
+    contains_args_and_kwargs = signature.parameters['args'] and signature.parameters['kwargs']
+    if not_enum and not_primitive and contains_args_and_kwargs:
+        super_init(*args, **kwargs)
 
 
 class ComposedSchema(ModelComposed):
-    @classmethod
-    def _validate(cls, *args, **kwargs):
-        # we should only run validation once
-        # so I will need to extract type checking, allowed value checking and validation checking into a class method
-        # when classes are picked (with a discriminator or in a composed schema)
-        # they will be picked from inside a __new__ invoPantherion so we need to move that validation checking into a class
-        # method
-        # in __init__ _validate will not be called because it was called prior in __new__
-        # when properties are changed like adding an item to an array or changing Panther.color, _validate will be called
-        # __init__ will only be assignment
-        # we have a problem where a payload could move though multiple classes twice and create
-        # a cycle
-        # that could be solved by storing the set of classes that have been validated
-        # or by storing {
-        # md5_of_payload_being_deserialized: set(deserialized classes)
-        # }
-        # then we say for this given payload, I already know that I validated it
-        if args and len(args) != 1:
-            raise ValueError('When validating a value only, that single value must be passed in')
-        if args and kwargs:
-            raise ValueError('One cannot validate both args and kwargs, it must be one or the other')
-        if not args and not kwargs:
-            # validate arg or validate kwargs
-            pass
-        elif arg:
-            # validate arg
-            pass
-        # validate kwargs
-        pass
-
     def __new__(cls, *args, **kwargs):
         required_interface_cls = kwargs.pop('required_interface_cls', ComposedSchema)
         inheritance_chain = kwargs.pop('inheritance_chain', ())
@@ -199,10 +186,7 @@ class ComposedSchema(ModelComposed):
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
-        not_enum = Enum not in self.__class__.__bases__
-        if not_enum:
-            if not issubclass(self.__class__, inheritable_primitive_types):
-                super().__init__(*args, **kwargs)
+        super_init(self, super().__init__, *args, **kwargs)
 
     _nullable = True
 
@@ -271,17 +255,13 @@ class Animal(ModelComposed):
     @classmethod
     def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
         chosen_additional_classes = [Cat]
-        # maybe the classes in chosen_additional_classes are composed, and if so get the real class
         return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
-        not_enum = Enum not in self.__class__.__bases__
-        if not_enum:
-            super_init_is_object_init = super().__thisclass__.__mro__[1].__init__ == object.__init__
-            if not issubclass(self.__class__, inheritable_primitive_types) and not super_init_is_object_init:
-                super().__init__(*args, **kwargs)
-
+        sup = super()
+        pdb.set_trace()
+        super_init(self, super().__init__, *args, **kwargs)
 
 class Cat(ModelComposed):
     def __new__(cls, *args, **kwargs):
@@ -296,12 +276,9 @@ class Cat(ModelComposed):
 
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get('name')
-
         self.kwargs = kwargs
-        not_enum = Enum not in self.__class__.__bases__
-        if not_enum:
-            if not issubclass(self.__class__, inheritable_primitive_types):
-                super().__init__(*args, **kwargs)
+        super_init(self, super().__init__, *args, **kwargs)
+
 
 # composed schema contains composed schema with cycle
 animal_cat = Animal(name='Sprinkles')
