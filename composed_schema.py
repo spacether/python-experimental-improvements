@@ -49,7 +49,7 @@ class IntModel(int):
         self.path = []
 
 
-inheritable_primitive_types = (int, float, str, datetime.date, datetime.datetime)
+inheritable_primitive_types = (int, float, str, datetime.date, datetime.datetime, list)
 
 class StringEnum(str, Enum):
     RED = 'red'
@@ -88,13 +88,11 @@ def get_new_instance(self_class, cls, super_instance, *args, **kwargs):
         inst._value_ = args[0]
         return inst
     elif issubclass(cls, inheritable_primitive_types):
-        # we are creating new instances of inheritable_primitive_types
-        inst = super_instance.__new__(cls, args[0])
-        inst.value = args[0]
-        return inst
-    # we are creating new instances of DynamicBaseClasses, list based class
-    if issubclass(cls, list):
-        inst = super_instance.__new__(cls)
+        # we are creating new instances of inheritable primitive types
+        if issubclass(cls, list):
+            inst = super_instance.__new__(cls)
+        else:
+            inst = super_instance.__new__(cls, args[0])
         inst.value = args[0]
         return inst
     # we are creating new instances of DynamicBaseClasses, object based class
@@ -114,8 +112,8 @@ def mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_
 
 def super_init(self, super_instance, *args, **kwargs):
     not_enum = Enum not in self.__class__.__bases__
-    not_primitive = not issubclass(self.__class__, inheritable_primitive_types)
-    if not_enum and not_primitive:
+    based_on_nonlist_primitive = issubclass(self.__class__, inheritable_primitive_types) and not issubclass(self.__class__, list)
+    if not_enum and not based_on_nonlist_primitive:
         classes_in_order = self.__class__.__mro__
         for i, cls in enumerate(classes_in_order):
             if cls == super_instance.__thisclass__:
