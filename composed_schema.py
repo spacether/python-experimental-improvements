@@ -34,7 +34,6 @@ def make_dynamic_class(*bases):
         assert (source_enum_bases[-1] is Enum), "The last entry in source_enum_bases must be Enum"
         bases.extend(source_enum_bases)
         # DynamicBaseClassesEnum cannot be used as a base class
-        # TODO: also add any bases in source_enum to DynamicBaseClassesEnum
         class DynamicBaseClassesEnum(*bases):
             for choice in source_enum:
                 # source_enum cannot be used as a base class, so copy its enum values into our new enum
