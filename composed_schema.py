@@ -62,10 +62,18 @@ class Panther:
 class ListModel(list):
     pass
 
-def add_to_inheritance_chain(inheritance_chain, self_class):
-    inheritance_chain = list(inheritance_chain)
-    inheritance_chain.append(self_class)
-    return tuple(inheritance_chain)
+def get_inheritance_chain_vars(cls, kwargs):
+    _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
+    _inheritance_chain = kwargs.pop('_inheritance_chain', ())
+    inheritance_cycle = False
+    if cls in _inheritance_chain:
+        inheritance_cycle = True
+        return _required_interface_cls, _inheritance_chain, inheritance_cycle
+
+    _inheritance_chain = list(_inheritance_chain)
+    _inheritance_chain.append(cls)
+    _inheritance_chain = tuple(_inheritance_chain)
+    return _required_interface_cls, _inheritance_chain, inheritance_cycle
 
 def get_new_instance(self_class, cls, super_instance, *args, **kwargs):
     if cls == self_class:
@@ -137,11 +145,9 @@ class ComposedSchema(ModelComposed):
         Returns:
             new_cls (type): the new dynamic class that we have built
         """
-        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
-        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
-        if cls in _inheritance_chain:
+        _required_interface_cls, _inheritance_chain, inheritance_cycle = get_inheritance_chain_vars(cls, kwargs)
+        if inheritance_cycle:
             return cls
-        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         chosen_additional_classes = []
         if args and not kwargs and len(args) == 1:
             arg = args[0]
@@ -239,11 +245,9 @@ class Animal(ModelComposed):
 
     @classmethod
     def _get_new_class(cls, *args, **kwargs):
-        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
-        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
-        if cls in _inheritance_chain:
+        _required_interface_cls, _inheritance_chain, inheritance_cycle = get_inheritance_chain_vars(cls, kwargs)
+        if inheritance_cycle:
             return cls
-        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         animal_type = kwargs['animal_type']
         if animal_type == 'Cat':
             chosen_additional_classes = [Cat]
@@ -262,11 +266,9 @@ class Cat(ModelComposed):
 
     @classmethod
     def _get_new_class(cls, *args, **kwargs):
-        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
-        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
-        if cls in _inheritance_chain:
+        _required_interface_cls, _inheritance_chain, inheritance_cycle = get_inheritance_chain_vars(cls, kwargs)
+        if inheritance_cycle:
             return cls
-        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         chosen_additional_classes = [Animal]
         return mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_interface_cls, *args, **kwargs)
 
