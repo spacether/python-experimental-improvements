@@ -68,19 +68,14 @@ def add_to_inheritance_chain(inheritance_chain, self_class):
     inheritance_chain.append(self_class)
     return tuple(inheritance_chain)
 
-def get_new_instance(self_class, cls, super_instance, inheritance_chain, required_interface_cls, *args, **kwargs):
+def get_new_instance(self_class, cls, super_instance, *args, **kwargs):
     if cls == self_class:
         # we are making an instance of self, but instead of making self
         # make a new class, new_cls
         # which includes dynamic bases including self
         # return an instance of that new class
-        new_cls = self_class._get_new_class(inheritance_chain, required_interface_cls, *args, **kwargs)
-        if issubclass(new_cls, Enum):
-            # for enums the new invoked is actual the Enum.__new__ the it calls back to this new to make class instances
-            # so we can't pass in inheritance_chain + required_interface_cls
-            new_inst = new_cls.__new__(new_cls, *args, **kwargs)
-        else:
-            new_inst = new_cls.__new__(new_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
+        new_cls = self_class._get_new_class(*args, **kwargs)
+        new_inst = new_cls.__new__(new_cls, *args, **kwargs)
         return new_inst
     if issubclass(cls, Enum):
         # we are creating new instances of DynamicBaseClassesEnum, Enum based class
@@ -106,16 +101,13 @@ def get_new_instance(self_class, cls, super_instance, inheritance_chain, require
     # we are creating new instances of DynamicBaseClasses, object based class
     return super_instance.__new__(cls)
 
-def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs):
+def mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_interface_cls, *args, **kwargs):
     real_additional_classes = []
     for chosen_cls in chosen_additional_classes:
         if issubclass(chosen_cls, ModelComposed):
-            # TODO use _get_new_class here
-            chosen_cls = chosen_cls._get_new_class(inheritance_chain, required_interface_cls, *args, **kwargs)
-            #new_inst = chosen_cls.__new__(chosen_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
-            #chosen_cls = new_inst.__class__
+            chosen_cls = chosen_cls._get_new_class(_inheritance_chain=_inheritance_chain, _required_interface_cls=_required_interface_cls, *args, **kwargs)
         real_additional_classes.append(chosen_cls)
-    if any(issubclass(c, required_interface_cls) for c in real_additional_classes) and cls is required_interface_cls:
+    if any(issubclass(c, _required_interface_cls) for c in real_additional_classes) and cls is _required_interface_cls:
         if len(real_additional_classes) == 1:
             return real_additional_classes[0]
         return make_dynamic_class(*real_additional_classes)
@@ -136,12 +128,10 @@ def super_init(self, super_instance, *args, **kwargs):
 
 class ComposedSchema(ModelComposed):
     def __new__(cls, *args, **kwargs):
-        required_interface_cls = kwargs.pop('required_interface_cls', ComposedSchema)
-        inheritance_chain = kwargs.pop('inheritance_chain', ())
-        return get_new_instance(ComposedSchema, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
+        return get_new_instance(ComposedSchema, cls, super(), *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
+    def _get_new_class(cls, *args, **kwargs):
         """
         For now we return dynamic classes of different bases depending upon the inputs
         In real life this function will use the class discriminator and composed schema info to determine
@@ -150,9 +140,11 @@ class ComposedSchema(ModelComposed):
         Returns:
             new_cls (type): the new dynamic class that we have built
         """
-        if cls in inheritance_chain:
+        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
+        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
+        if cls in _inheritance_chain:
             return cls
-        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
+        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         chosen_additional_classes = []
         if args and not kwargs and len(args) == 1:
             arg = args[0]
@@ -181,7 +173,7 @@ class ComposedSchema(ModelComposed):
             chosen_additional_classes = [Panther]
         if not chosen_additional_classes:
             raise ValueError('Arguments are required to make a new class')
-        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
+        return mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
@@ -246,21 +238,21 @@ assert a == value
 
 class Animal(ModelComposed):
     def __new__(cls, *args, **kwargs):
-        required_interface_cls = kwargs.pop('required_interface_cls', Animal)
-        inheritance_chain = kwargs.pop('inheritance_chain', ())
-        return get_new_instance(Animal, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
+        return get_new_instance(Animal, cls, super(), *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
-        if cls in inheritance_chain:
+    def _get_new_class(cls, *args, **kwargs):
+        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
+        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
+        if cls in _inheritance_chain:
             return cls
-        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
+        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         animal_type = kwargs['animal_type']
         if animal_type == 'Cat':
             chosen_additional_classes = [Cat]
         elif animal_type == 'Dog':
             chosen_additional_classes = [Dog]
-        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
+        return mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.name = kwargs.get('name')
@@ -269,17 +261,17 @@ class Animal(ModelComposed):
 
 class Cat(ModelComposed):
     def __new__(cls, *args, **kwargs):
-        required_interface_cls = kwargs.pop('required_interface_cls', Cat)
-        inheritance_chain = kwargs.pop('inheritance_chain', ())
-        return get_new_instance(Cat, cls, super(), inheritance_chain, required_interface_cls, *args, **kwargs)
+        return get_new_instance(Cat, cls, super(), *args, **kwargs)
 
     @classmethod
-    def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
-        if cls in inheritance_chain:
+    def _get_new_class(cls, *args, **kwargs):
+        _required_interface_cls = kwargs.pop('_required_interface_cls', cls)
+        _inheritance_chain = kwargs.pop('_inheritance_chain', ())
+        if cls in _inheritance_chain:
             return cls
-        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
+        _inheritance_chain = add_to_inheritance_chain(_inheritance_chain, cls)
         chosen_additional_classes = [Animal]
-        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
+        return mfg_new_class(cls, chosen_additional_classes, _inheritance_chain, _required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
@@ -301,9 +293,6 @@ animal = Animal(name='Lassie', animal_type='Dog')
 bases = (Animal, Dog)
 assert animal.__class__.__bases__ == bases
 assert animal.name == 'Lassie'
-
-# TODO: refactor the class creation code out of the __new__ code
-# that way we will be more easily able to add validate + discriminaotr functionality
 
 # # Difficult example
 # Apple:
