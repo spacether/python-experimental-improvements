@@ -63,6 +63,10 @@ class Panther:
 class ListModel(list):
     pass
 
+def add_to_inheritance_chain(inheritance_chain, self_class):
+    inheritance_chain = list(inheritance_chain)
+    inheritance_chain.append(self_class)
+    return tuple(inheritance_chain)
 
 def get_new_instance(self_class, cls, super_instance, inheritance_chain, required_interface_cls, *args, **kwargs):
     if cls == self_class:
@@ -70,14 +74,6 @@ def get_new_instance(self_class, cls, super_instance, inheritance_chain, require
         # make a new class, new_cls
         # which includes dynamic bases including self
         # return an instance of that new class
-        cyclic_inheritance_case = self_class in inheritance_chain
-        if cyclic_inheritance_case:
-            # Animal -> Cat -> Animal
-            # don't make a Cat in animal again, just make Animal
-            return super_instance.__new__(cls)
-        inheritance_chain = list(inheritance_chain)
-        inheritance_chain.append(self_class)
-        inheritance_chain = tuple(inheritance_chain)
         new_cls = self_class._get_new_class(inheritance_chain, required_interface_cls, *args, **kwargs)
         if issubclass(new_cls, Enum):
             # for enums the new invoked is actual the Enum.__new__ the it calls back to this new to make class instances
@@ -114,8 +110,10 @@ def mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_in
     real_additional_classes = []
     for chosen_cls in chosen_additional_classes:
         if issubclass(chosen_cls, ModelComposed):
-            new_inst = chosen_cls.__new__(chosen_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
-            chosen_cls = new_inst.__class__
+            # TODO use _get_new_class here
+            chosen_cls = chosen_cls._get_new_class(inheritance_chain, required_interface_cls, *args, **kwargs)
+            #new_inst = chosen_cls.__new__(chosen_cls, *args, inheritance_chain=inheritance_chain, required_interface_cls=required_interface_cls, **kwargs)
+            #chosen_cls = new_inst.__class__
         real_additional_classes.append(chosen_cls)
     if any(issubclass(c, required_interface_cls) for c in real_additional_classes) and cls is required_interface_cls:
         if len(real_additional_classes) == 1:
@@ -152,31 +150,38 @@ class ComposedSchema(ModelComposed):
         Returns:
             new_cls (type): the new dynamic class that we have built
         """
+        if cls in inheritance_chain:
+            return cls
+        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
+        chosen_additional_classes = []
         if args and not kwargs and len(args) == 1:
             arg = args[0]
             if arg is None:
                 # type(None) and bool cannot be subclassed so we must use Enums
                 # to store None, True, and False
-                return make_dynamic_class(cls, NoneEnum)
+                chosen_additional_classes = [NoneEnum]
             elif arg is True:
-                return make_dynamic_class(cls, TrueEnum)
+                chosen_additional_classes = [TrueEnum]
             elif arg is False:
-                return make_dynamic_class(cls, FalseEnum)
+                chosen_additional_classes = [FalseEnum]
             elif isinstance(arg, int):
-                return make_dynamic_class(cls, IntModel)
+                chosen_additional_classes = [IntModel]
             elif isinstance(arg, float):
-                return make_dynamic_class(cls, float)
+                chosen_additional_classes = [float]
             elif isinstance(arg, str):
-                return make_dynamic_class(cls, StringEnum)
+                chosen_additional_classes = [StringEnum]
             elif isinstance(arg, list):
                 if not arg:
-                    return make_dynamic_class(cls, list)
-                return make_dynamic_class(cls, ListModel)
+                    chosen_additional_classes = [list]
+                else:
+                    chosen_additional_classes = [ListModel]
             else:
                 raise ValueError('case not handled yet')
         elif kwargs:
-            return make_dynamic_class(cls, Panther)
-        raise ValueError('Arguments are required to make a new class')
+            chosen_additional_classes = [Panther]
+        if not chosen_additional_classes:
+            raise ValueError('Arguments are required to make a new class')
+        return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
     def __init__(self, *args, **kwargs):
         self.kwargs = kwargs
@@ -247,6 +252,9 @@ class Animal(ModelComposed):
 
     @classmethod
     def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
+        if cls in inheritance_chain:
+            return cls
+        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
         animal_type = kwargs['animal_type']
         if animal_type == 'Cat':
             chosen_additional_classes = [Cat]
@@ -267,6 +275,9 @@ class Cat(ModelComposed):
 
     @classmethod
     def _get_new_class(cls, inheritance_chain, required_interface_cls, *args, **kwargs):
+        if cls in inheritance_chain:
+            return cls
+        inheritance_chain = add_to_inheritance_chain(inheritance_chain, cls)
         chosen_additional_classes = [Animal]
         return mfg_new_class(cls, chosen_additional_classes, inheritance_chain, required_interface_cls, *args, **kwargs)
 
@@ -291,6 +302,8 @@ bases = (Animal, Dog)
 assert animal.__class__.__bases__ == bases
 assert animal.name == 'Lassie'
 
+# TODO: refactor the class creation code out of the __new__ code
+# that way we will be more easily able to add validate + discriminaotr functionality
 
 # # Difficult example
 # Apple:
