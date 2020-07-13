@@ -17,13 +17,6 @@ class ModelComposed(metaclass=CallFixer):
     pass
 
 
-# If I make my own version of enums, then I can use __call__ to captures the inputs and mutate them
-# for objects only
-# correct type
-# correct value
-# alternate solution, convert js to python names new and in __init__
-# type conversion in both?
-
 def make_dynamic_class(*bases):
     """
     Returns a new DynamicBaseClasses class that is made with the subclasses bases
